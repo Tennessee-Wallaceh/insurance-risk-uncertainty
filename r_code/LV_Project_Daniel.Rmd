@@ -1,0 +1,177 @@
+---
+title: "LV_Project"
+author: "Daniel Gardner"
+date: "2024-06-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Loading Data
+
+Initially we start by loading in the frequency and severity data from github
+
+```{r}
+load(url('https://github.com/dutangc/CASdatasets/blob/master/data/freMTPL2freq.rda?raw=true'))
+load(url('https://github.com/dutangc/CASdatasets/blob/master/data/freMTPL2sev.rda?raw=true'))
+data <- freMTPL2freq
+sev <- freMTPL2sev
+```
+
+# Issues with distribution
+
+The main problem is that each 'class' of Nbclaims far outweighs the previous class in terms of frequency, i.e. the amount of 0 claims is 10 times the amount of 1 claims, and so on.
+
+```{r}
+par(mfrow=c(1,5))
+hist(data$ClaimNb, main = 'Original Dist. of #Claims', xlab = '#Claims')
+hist(data$ClaimNb[!data$ClaimNb==0], main = '#Claims ( -0 )', xlab = '#Claims')
+hist(data$ClaimNb[!(data$ClaimNb %in% c(0,1))], main = '#Claims ( -0,1 )', xlab = '#Claims')
+hist(data$ClaimNb[!(data$ClaimNb %in% c(0,1,2))], main = '#Claims ( -0,1,2 )', xlab = '#Claims')
+hist(data$ClaimNb[!(data$ClaimNb %in% c(0,1,2,3))],, main = '#Claims ( -0,1,2,3 )', xlab = '#Claims')
+```
+# Trying scaled Nb with Exposure
+
+One potential solution to this is to scale the number of claims with the exposure (i.e. model claims per year instead). In this way, we still have zero-inflation, but now the distribution after zero follows a general exponential family shape which could be modelled by multiple distributions.
+
+```{r}
+scaled_data <- cbind(data$ClaimNb/data$Exposure,data)
+
+colnames(scaled_data) <- c("Scaled_ClaimNb",colnames(data))
+
+nozeros <- scaled_data$Scaled_ClaimNb[scaled_data$Scaled_ClaimNb!=0]
+
+par(mfrow=c(1,2))
+
+x <- scaled_data$Scaled_ClaimNb[scaled_data$Scaled_ClaimNb<50]
+hist(x, main = paste("Dist. of Scaled NbClaims"), probability = TRUE, breaks = 50,xlab='Scaled NbClaims')
+
+x <- nozeros[nozeros<50]
+hist(x, main = paste("Dist. of Scaled NbClaims (0 removed)"), probability = TRUE, breaks = 50,xlab='Scaled NbClaims')
+```
+
+
+# Predicting #Claims
+
+## Attempt 1: GLM using classification
+
+Initially, working on the original data for now, we can try multi-class regression using a multinomial distribution model. I've used the package `nnet` and the function `multinom` as its one of the simplest.
+
+```{r}
+library(nnet)
+# REMOVING OUTLIERS
+
+# Removing all policies with 4 or more claims
+data1 <- data[data$ClaimNb < 4,]
+
+# Converting to factor
+data1$ClaimNb <- as.factor(data1$ClaimNb)
+
+# Splitting data into test and train
+set.seed(123)
+indices <- sample(1:nrow(data1), size = 0.7 * nrow(data1))
+train_data <- data1[indices, ]
+test_data <- data1[-indices, ]
+
+# Training glm multinomial regression
+formula <- "ClaimNb ~ Exposure + as.factor(Area) + VehPower + VehAge + DrivAge + BonusMalus + as.factor(VehBrand) + as.factor(VehGas) + as.factor(Region) + Density"
+mod <- multinom(formula, data=train_data)
+
+# Predictions
+pred_probs <- predict(object=mod, newdata=test_data, type="probs")
+head(round(pred_probs, digits=2))
+```
+
+The output here is a vector of probabilities for each observation, giving the conditional probability of that observation belonging to class 0,1,2, or 3. One problem however is that evidently with such an imbalanced frequency of classes, we output a probability close to 1 for nearly every observation. Therefore simplying assigning the predictive class as `which(pred_probs == max(pred_probs))` will just predict all 0s. Therefore by tweaking the weighting (bit ad hoc rip) we can get a more reasonably amount of each class predicted.
+
+```{r}
+# Converting pred_probs to preds
+N <- dim(test_data)[1]
+
+preds <- rep(0,N)
+
+# Messing with weightings
+w <- c(.5,4,7,5)
+
+for (i in 1:N){
+  
+  probs <- as.array(pred_probs[i,])*w/sum(as.array(pred_probs[i,])*w)
+  #print(probs)
+  preds[i] <- which(probs==max(probs))-1
+  
+}
+
+table(preds)
+```
+
+Check this performance via confusion matrix (didn't work very well lol)
+
+```{r}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(boot)
+library(caret)
+library(MASS)
+confusionMatrix(as.factor(preds), as.factor(test_data$ClaimNb))
+```
+
+
+# Trying XgBoost
+
+Now we can try the way better technique: just using xgboost. This is an initial test to get to grips with the formatting: Removing all data points with Nbclaims > 1, and trying a logistic binary classifier.
+
+```{r}
+library(xgboost)
+
+# Preparing data
+data1 <- data1[data1$ClaimNb < 2,]
+data1$VehGas <- as.factor(data1$VehGas)
+
+# Removing ID and response variable
+X <- data1[,-c(1,2)]
+
+# Converting all columns to numeric as required for xgboost
+for (i in 1:10){
+  
+  X[,i] <- as.numeric(X[,i])
+  
+}
+
+# Splitting into test and train
+set.seed(123)
+indices <- sample(1:nrow(X), size = 0.7 * nrow(X))
+X.train <- X[indices, ]
+X.test <- X[-indices, ]
+
+# Converting to matrix
+X.train <- as.matrix(X.train)
+X.test <- as.matrix(X.test)
+y.train <- as.numeric(data1$ClaimNb[indices])
+```
+
+```{r}
+# Training model
+bst <- xgboost(data = X.train, label = y.train, max_depth = 2, eta = 1, nrounds = 2,
+               nthread = 2, objective = "binary:logistic")
+```
+```{r}
+# Predicting
+preds <- predict(bst, X.test)
+
+hist(preds)
+```
+
+Seeing that the predictive probabilities don't go above 0.25, we can put a decision boundary at around 0.15 to classify these probabilities to either 0 or 1. The performance still isn't great but a bit better.
+
+```{r}
+IfClaim_pred_class <- ifelse(preds > 0.15, 1, 0)
+IfClaim_actual_class <- as.numeric(data1$ClaimNb[-indices])
+
+# Confusion matrix - accuracy
+confusionMatrix(as.factor(IfClaim_pred_class), as.factor(IfClaim_actual_class))
+```
+
+
