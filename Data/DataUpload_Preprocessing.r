@@ -31,17 +31,19 @@ freMTPL2freq[,"Region"] <- relevel(freMTPL2freq[,"Region"], ref="Centre")
 ## Data Edit ----
 # Merge datasets based on matching IDpol
 # When merging datasets, duplicate rows are created for those who have made more then 1 claim.
-freMTPL2_IPD <- merge(freMTPL2freq, freMTPL2sev, by = "IDpol", all.x = TRUE)
+freMTPL2_Amount_per_claim <- merge(freMTPL2freq, freMTPL2sev, by = "IDpol", all.x = TRUE)
 
-freMTPL2_IPD <- freMTPL2_IPD[, names(freMTPL2_IPD) != "ClaimNb"]
+# This data set is used to model amount of claims
+freMTPL2_Amount_per_claim <- freMTPL2_Amount_per_claim[, names(freMTPL2_Amount_per_claim) != "ClaimNb"]
 
 # Group freMTPL2sev by IDpol and sum ClaimAmount
-freMTPL2sev_AgD <- freMTPL2sev %>%
+freMTPL2sev_Claim_number <- freMTPL2sev %>%
   group_by(IDpol) %>%
   summarise(ClaimAmount = sum(ClaimAmount))
 
-freMTPL2_Agd <- merge(freMTPL2freq, freMTPL2sev_AgD, by = "IDpol", all.x = TRUE)
+#This Dataset is used to model Amount per claim
+freMTPL2_Claim_number <- merge(freMTPL2freq, freMTPL2sev_Claim_number, by = "IDpol", all.x = TRUE)
 
 # Create new variable with any claimNb over 4 grouped at 4
-freMTPL2_Agd$ClaimNb_cap <- pmin(freMTPL2_Agd$ClaimNb, 4)
+freMTPL2_Claim_number$ClaimNb_cap <- pmin(freMTPL2_Agd$ClaimNb, 4)
 freMTPL2freq$ClaimNb_cap <- pmin(freMTPL2freq$ClaimNb, 4)
