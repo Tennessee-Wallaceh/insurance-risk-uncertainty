@@ -1,0 +1,187 @@
+---
+title: "Regression for Scaled Data"
+author: "Yuqi Zhang"
+date: "2024-06-10"
+output: pdf_document
+---
+
+```{r}
+summary(scaled_data)
+```
+# Log-Normal Distribution
+
+## GLM
+
+```{r}
+library(nnet)
+library(MASS)
+
+# log-transformation
+scaled_data$log_Scaled_ClaimNb <- log(scaled_data$Scaled_ClaimNb + 1)
+
+scaled_data <- scaled_data[scaled_data$Scaled_ClaimNb < quantile(scaled_data$Scaled_ClaimNb, 0.99),]
+
+# Categorical to factors
+scaled_data$Area <- as.factor(scaled_data$Area)
+scaled_data$VehBrand <- as.factor(scaled_data$VehBrand)
+scaled_data$VehGas <- as.factor(scaled_data$VehGas)
+scaled_data$Region <- as.factor(scaled_data$Region)
+
+set.seed(123)
+train_indices <- sample(1:nrow(scaled_data), size = 0.7 * nrow(scaled_data))
+train_data <- scaled_data[train_indices, ]
+test_data <- scaled_data[-train_indices, ]
+
+# GLM
+formula <- log_Scaled_ClaimNb ~ Exposure + Area + VehPower + VehAge + DrivAge + BonusMalus + VehBrand + VehGas + Region + Density
+
+glm_model <- glm(formula, data = train_data, family = gaussian())
+```
+
+## XGBoost
+
+```{r}
+library(caret)
+library(xgboost)
+
+X <- scaled_data[, -1]
+y <- scaled_data$Scaled_ClaimNb
+
+# Applying label encoding to categorical features
+categorical_features <- sapply(X, is.factor)
+X[categorical_features] <- lapply(X[categorical_features], function(x) as.integer(as.factor(x)))
+
+X <- as.data.frame(X)
+
+set.seed(123)
+train_indices <- sample(1:nrow(X), size = 0.7 * nrow(X))
+X_train <- X[train_indices, ]
+X_test <- X[-train_indices, ]
+y_train <- y[train_indices]
+y_test <- y[-train_indices]
+
+X_train <- as.matrix(X_train)
+X_test <- as.matrix(X_test)
+
+# Converting to DMatrix for XGBoost
+dtrain <- xgb.DMatrix(data = X_train, label = y_train)
+dtest <- xgb.DMatrix(data = X_test, label = y_test)
+
+```
+
+```{r}
+# XGBoost model parameters
+params <- list(
+  booster = "gbtree",
+  objective = "reg:squaredlogerror",
+  eta = 0.1,
+  max_depth = 6,
+  subsample = 0.5,
+  colsample_bytree = 0.7
+)
+
+# XGBoost model
+xgb_model <- xgboost(params = params, data = dtrain, nrounds = 100, verbose = 0)
+
+```
+
+## Evaluation - Gini and MSE 
+
+```{r}
+calculate_gini <- function(actual, predicted) {
+
+  df <- data.frame(actual = actual, predicted = predicted)
+  df <- df[order(df$predicted),]
+
+  # Calculate the cumulative sums of actual values
+  cum_actuals <- cumsum(df$actual) / sum(df$actual)
+  cum_predicted = cumsum(df$predicted) / sum(df$predicted)
+  
+  # Area under the Lorenz curve
+  Lorenz = cumsum(sort(df$actual) / sum(df$actual))
+  B = sum(Lorenz[-length(Lorenz)]) / (length(Lorenz) - 1)
+
+  # Area above the Lorenz curve
+  A = 0.5 - B
+  gini = (A / 0.5)
+
+  return(gini)
+}
+
+```
+
+```{r}
+# GLM
+predictions_glm <- exp(predict(glm_model, newdata = test_data, type = "response")) - 1
+
+hist(predictions_glm)
+
+# MSE for GLM
+mse_glm <- mean((predictions_glm - test_data$Scaled_ClaimNb)^2)
+print(paste("GLM MSE:", mse_glm))
+
+# Gini for GLM
+gini_glm <- calculate_gini(test_data$Scaled_ClaimNb, predictions_glm)
+print(paste("GLM Gini:", gini_glm))
+
+```
+
+```{r}
+# XGBoost
+predictions_xgb <- predict(xgb_model, dtest)
+hist(predictions_xgb)
+
+# MSE for XGBoost
+mse_xgb <- mean((predictions_xgb - y_test)^2)
+print(paste("XGBoost MSE:", mse_xgb))
+
+# Gini for XGBoost
+gini_xgb <- calculate_gini(y_test, predictions_xgb)
+print(paste("XGBoost Gini:", gini_xgb))
+
+```
+The very high Gini coefficients and show that GLM and XGBoost both effectively discriminate between different outcomes. It ranks the predictions very well relative to the actual data. But in case of overfittig, we would like to use cross-validation.
+
+## Cross-Validation for GLM
+
+```{r}
+library(boot)
+set.seed(123)
+
+formula <- log_Scaled_ClaimNb ~ Exposure + Area + VehPower + VehAge + DrivAge + BonusMalus + VehBrand + VehGas + Region + Density
+
+glm_model <- glm(formula, data = scaled_data, family = gaussian())
+
+cv_results <- cv.glm(scaled_data, glm_model, K = 10)
+
+print(cv_results)
+
+```
+The results indicate that GLM is performing well, with stable and low prediction errors across cross-validation folds.
+
+## Cross-Validation for XGBoost
+
+```{r}
+data_dmatrix <- xgb.DMatrix(data = as.matrix(X), label = y)
+
+# Parameters
+params <- list(
+  booster = "gbtree",
+  objective = "reg:squarederror",
+  eta = 0.1,
+  max_depth = 6,
+  subsample = 0.7,
+  colsample_bytree = 0.7,
+  lambda = 1,  # L2 regularization
+  alpha = 0.1  # L1 regularization
+)
+
+# Perform cross-validation
+cv_results <- xgb.cv(params = params, data = data_dmatrix, nrounds = 100, nfold = 5, metrics = "rmse", early_stopping_rounds = 10, showsd = TRUE)
+print(cv_results)
+
+```
+
+The results of XGBoost suggest it is well-tuned and robust.
+
+
