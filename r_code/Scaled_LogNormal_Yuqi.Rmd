@@ -8,9 +8,6 @@ output: pdf_document
 ```{r}
 summary(scaled_data)
 ```
-# Log-Normal Distribution
-
-## GLM
 
 ```{r}
 library(nnet)
@@ -33,18 +30,18 @@ train_data <- scaled_data[train_indices, ]
 test_data <- scaled_data[-train_indices, ]
 
 # GLM
-formula <- log_Scaled_ClaimNb ~ Exposure + Area + VehPower + VehAge + DrivAge + BonusMalus + VehBrand + VehGas + Region + Density
+formula <- log_Scaled_ClaimNb ~ as.factor(Area) + VehPower + VehAge + DrivAge + BonusMalus + as.factor(VehBrand) + as.factor(VehGas) + as.factor(Region) + Density
 
 glm_model <- glm(formula, data = train_data, family = gaussian())
 ```
 
-## XGBoost
+
 
 ```{r}
 library(caret)
 library(xgboost)
 
-X <- scaled_data[, -1]
+X <- scaled_data[, -c(1:4,14)]
 y <- scaled_data$Scaled_ClaimNb
 
 # Applying label encoding to categorical features
@@ -85,7 +82,10 @@ xgb_model <- xgboost(params = params, data = dtrain, nrounds = 100, verbose = 0)
 
 ```
 
-## Evaluation - Gini and MSE 
+```{r}
+library(DescTools)
+```
+
 
 ```{r}
 calculate_gini <- function(actual, predicted) {
@@ -140,15 +140,14 @@ gini_xgb <- calculate_gini(y_test, predictions_xgb)
 print(paste("XGBoost Gini:", gini_xgb))
 
 ```
-The very high Gini coefficients and show that GLM and XGBoost both effectively discriminate between different outcomes. It ranks the predictions very well relative to the actual data. But in case of overfittig, we would like to use cross-validation.
+The very high Gini coefficients and show that GLM and XGBoost both effectively discriminate between different outcomes. It ranks the predictions very well relative to the actual data.
 
 ## Cross-Validation for GLM
-
 ```{r}
 library(boot)
 set.seed(123)
 
-formula <- log_Scaled_ClaimNb ~ Exposure + Area + VehPower + VehAge + DrivAge + BonusMalus + VehBrand + VehGas + Region + Density
+formula <- log_Scaled_ClaimNb ~ as.factor(Area) + VehPower + VehAge + DrivAge + BonusMalus + as.factor(VehBrand) + as.factor(VehGas) + as.factor(Region) + Density
 
 glm_model <- glm(formula, data = scaled_data, family = gaussian())
 
@@ -157,7 +156,7 @@ cv_results <- cv.glm(scaled_data, glm_model, K = 10)
 print(cv_results)
 
 ```
-The results indicate that GLM is performing well, with stable and low prediction errors across cross-validation folds.
+
 
 ## Cross-Validation for XGBoost
 
@@ -182,6 +181,6 @@ print(cv_results)
 
 ```
 
-The results of XGBoost suggest it is well-tuned and robust.
+
 
 
