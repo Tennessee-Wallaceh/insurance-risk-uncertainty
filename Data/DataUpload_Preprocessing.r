@@ -1,3 +1,9 @@
+library(dplyr)    
+library(tidyr)
+library(ggplot2)   
+library(readxl)
+library(farff)
+
 # Data Load ----
 url <- "https://github.com/dutangc/CASdatasets/blob/master/data/freMTPL2freq.rda?raw=true"
 load(url(url))
