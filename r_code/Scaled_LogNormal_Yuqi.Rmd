@@ -6,33 +6,50 @@ output: pdf_document
 ---
 
 ```{r}
-summary(scaled_data)
+scaled_data_train <- cbind(info_tr_train$ClaimNb_cap/info_tr_train$Exposure,info_tr_train)
+colnames(scaled_data_train) <- c("Scaled_ClaimNb",colnames(info_tr_train))
+scaled_data_train <- scaled_data_train[, -c(2,3,13)]
+
+scaled_data_test <- cbind(info_tr_test$ClaimNb_cap/info_tr_test$Exposure,info_tr_test)
+colnames(scaled_data_test) <- c("Scaled_ClaimNb",colnames(info_tr_test))
+scaled_data_test <- scaled_data_test[, -c(2,3,13)]
 ```
+
+```{r}
+# log-transformation
+scaled_data_train$log_Scaled_ClaimNb <- log(scaled_data_train$Scaled_ClaimNb + 1)
+scaled_data_train <- scaled_data_train[scaled_data_train$Scaled_ClaimNb < quantile(scaled_data_train$Scaled_ClaimNb, 0.99),]
+
+# Categorical to factors
+scaled_data_train$Area <- as.factor(scaled_data_train$Area)
+scaled_data_train$VehBrand <- as.factor(scaled_data_train$VehBrand)
+scaled_data_train$VehGas <- as.factor(scaled_data_train$VehGas)
+scaled_data_train$Region <- as.factor(scaled_data_train$Region)
+
+scaled_data_train <- scaled_data_train[, -c(1)]
+
+# log-transformation
+scaled_data_test$log_Scaled_ClaimNb <- log(scaled_data_test$Scaled_ClaimNb + 1)
+scaled_data_test <- scaled_data_test[scaled_data_test$Scaled_ClaimNb < quantile(scaled_data_test$Scaled_ClaimNb, 0.99),]
+
+# Categorical to factors
+scaled_data_test$Area <- as.factor(scaled_data_test$Area)
+scaled_data_test$VehBrand <- as.factor(scaled_data_test$VehBrand)
+scaled_data_test$VehGas <- as.factor(scaled_data_test$VehGas)
+scaled_data_test$Region <- as.factor(scaled_data_test$Region)
+
+scaled_data_test <- scaled_data_test[, -c(1)]
+```
+
 
 ```{r}
 library(nnet)
 library(MASS)
 
-# log-transformation
-scaled_data$log_Scaled_ClaimNb <- log(scaled_data$Scaled_ClaimNb + 1)
-
-scaled_data <- scaled_data[scaled_data$Scaled_ClaimNb < quantile(scaled_data$Scaled_ClaimNb, 0.99),]
-
-# Categorical to factors
-scaled_data$Area <- as.factor(scaled_data$Area)
-scaled_data$VehBrand <- as.factor(scaled_data$VehBrand)
-scaled_data$VehGas <- as.factor(scaled_data$VehGas)
-scaled_data$Region <- as.factor(scaled_data$Region)
-
-set.seed(123)
-train_indices <- sample(1:nrow(scaled_data), size = 0.7 * nrow(scaled_data))
-train_data <- scaled_data[train_indices, ]
-test_data <- scaled_data[-train_indices, ]
-
 # GLM
-formula <- log_Scaled_ClaimNb ~ as.factor(Area) + VehPower + VehAge + DrivAge + BonusMalus + as.factor(VehBrand) + as.factor(VehGas) + as.factor(Region) + Density
+formula <- log_Scaled_ClaimNb ~as.factor(Area) + VehPower + VehAge + DrivAge + BonusMalus + as.factor(VehBrand) + as.factor(VehGas) + as.factor(Region) + Density
 
-glm_model <- glm(formula, data = train_data, family = gaussian())
+glm_model <- glm(formula, data = scaled_data_train, family = gaussian())
 ```
 
 
@@ -41,21 +58,16 @@ glm_model <- glm(formula, data = train_data, family = gaussian())
 library(caret)
 library(xgboost)
 
-X <- scaled_data[, -c(1:4,14)]
-y <- scaled_data$log_Scaled_ClaimNb
+X_train <- scaled_data_train[, -c(10)]
+y_train <- scaled_data_train$log_Scaled_ClaimNb
+X_test <- scaled_data_test[, -c(10)]
+y_test <- scaled_data_test$log_Scaled_ClaimNb
 
-# Applying label encoding to categorical features
-categorical_features <- sapply(X, is.factor)
-X[categorical_features] <- lapply(X[categorical_features], function(x) as.integer(as.factor(x)))
+categorical_features <- sapply(X_train, is.factor)
+X_train[categorical_features] <- lapply(X_train[categorical_features], function(x) as.integer(as.factor(x)))
 
-X <- as.data.frame(X)
-
-set.seed(123)
-train_indices <- sample(1:nrow(X), size = 0.7 * nrow(X))
-X_train <- X[train_indices, ]
-X_test <- X[-train_indices, ]
-y_train <- y[train_indices]
-y_test <- y[-train_indices]
+categorical_features <- sapply(X_test, is.factor)
+X_test[categorical_features] <- lapply(X_test[categorical_features], function(x) as.integer(as.factor(x)))
 
 X_train <- as.matrix(X_train)
 X_test <- as.matrix(X_test)
@@ -108,16 +120,16 @@ calculate_gini <- function(actual, predicted) {
 
 ```{r}
 # GLM
-predictions_glm <- exp(predict(glm_model, newdata = test_data, type = "response")) - 1
+predictions_glm <- exp(predict(glm_model, newdata = scaled_data_test, type = "response")) - 1
 
 hist(predictions_glm)
 
 # MSE for GLM
-mse_glm <- mean((predictions_glm - test_data$Scaled_ClaimNb)^2)
+mse_glm <- mean((predictions_glm - scaled_data_test$log_Scaled_ClaimNb)^2)
 print(paste("GLM MSE:", mse_glm))
 
 # Gini for GLM
-gini_glm <- calculate_gini(test_data$Scaled_ClaimNb, predictions_glm)
+gini_glm <- calculate_gini(scaled_data_test$log_Scaled_ClaimNb, predictions_glm)
 print(paste("GLM Gini:", gini_glm))
 
 ```
@@ -137,46 +149,4 @@ print(paste("XGBoost Gini:", gini_xgb))
 
 ```
 The very high Gini coefficients and show that GLM and XGBoost both effectively discriminate between different outcomes. It ranks the predictions very well relative to the actual data.
-
-## Cross-Validation for GLM
-```{r}
-library(boot)
-set.seed(123)
-
-formula <- log_Scaled_ClaimNb ~ as.factor(Area) + VehPower + VehAge + DrivAge + BonusMalus + as.factor(VehBrand) + as.factor(VehGas) + as.factor(Region) + Density
-
-glm_model <- glm(formula, data = scaled_data, family = gaussian())
-
-cv_results <- cv.glm(scaled_data, glm_model, K = 10)
-
-print(cv_results)
-
-```
-
-
-## Cross-Validation for XGBoost
-
-```{r}
-data_dmatrix <- xgb.DMatrix(data = as.matrix(X), label = y)
-
-# Parameters
-params <- list(
-  booster = "gbtree",
-  objective = "reg:squarederror",
-  eta = 0.1,
-  max_depth = 6,
-  subsample = 0.7,
-  colsample_bytree = 0.7,
-  lambda = 1,  # L2 regularization
-  alpha = 0.1  # L1 regularization
-)
-
-# Perform cross-validation
-cv_results <- xgb.cv(params = params, data = data_dmatrix, nrounds = 100, nfold = 5, metrics = "rmse", early_stopping_rounds = 10, showsd = TRUE)
-print(cv_results)
-
-```
-
-
-
 
