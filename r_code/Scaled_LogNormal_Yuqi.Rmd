@@ -150,3 +150,5 @@ print(paste("XGBoost Gini:", gini_xgb))
 ```
 The very high Gini coefficients and show that GLM and XGBoost both effectively discriminate between different outcomes. It ranks the predictions very well relative to the actual data.
 
+
+
