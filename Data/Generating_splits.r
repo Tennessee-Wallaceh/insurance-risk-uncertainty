@@ -15,7 +15,7 @@ load(url(url))
 # For each set we will have 3 data objects:
   # info - dataset to train the number of claims model
   # comb - dataset to train the amount of a claim model
-  # comb_agg - dataset to train the total amount for a policy
+  # comb_agg - dataset to test model for modelling the total amount for a policy
    
   # Then to split the datasets we split the info and comb dataset
     # Then in order to get the conformal intervals and check the coverage for the total claims we use the same split as used for the info set
@@ -54,7 +54,6 @@ comb = comb[!comb$ClaimAmount == 0,]
 zeroind = which(info$ClaimNb == 0)
 nonzeroind = which(info$ClaimNb > 0)
 
-
 set.seed(100)
 traincalzeroind = sample(zeroind, floor(0.8*length(zeroind)))
 testzero = info[-traincalzeroind,] 
@@ -71,6 +70,19 @@ trainnz = info[setdiff(traincalnzind,calnzind),]
 info_train = rbind(trainzero, trainnz)
 info_cal = rbind(calzero, calnz)
 info_test = rbind(testzero, testnz)
+
+  
+# comb dataset, not stratified sampling as only using data with non zero claims
+set.seed(100)
+traincalind = sample(1:nrow(comb), floor(0.8*(nrow(comb))))
+comb_test = comb[-traincalind,] 
+calind = sample(traincalind, floor(0.0625*nrow(comb)))
+comb_cal = comb[calind,] 
+comb_train = comb[setdiff(traincalind,calind),] 
+ 
+
+
+
 
 
 
