@@ -194,6 +194,11 @@ print(confusion_matrix_glm)
 confusion_matrix_xgb <- confusionMatrix(factor(binary_predictions_xgb), factor(binary_actuals))
 print(confusion_matrix_xgb)
 
+mean((binary_predictions_glm-binary_actuals)^2)
+mean((binary_predictions_xgb-binary_actuals)^2)
+
+calculate_gini(predicted_claimNb_glm, info_tr_test$ClaimNb_cap)
+calculate_gini(predicted_claimNb_xgb, info_tr_test$ClaimNb_cap)
 ```
 
 
