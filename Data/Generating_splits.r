@@ -23,6 +23,7 @@ load(url(url))
   # Using stratified sampling to generate the 3 sets
 
 #### Original ####
+freMTPL2freq$Exposure = pmin(freMTPL2freq$Exposure, 1)
 info = freMTPL2freq ; claims = freMTPL2sev
 # rm(freMTPL2freq);rm(freMTPL2sev)
 # removing outliers
@@ -142,6 +143,10 @@ comb_tr = comb_tr[!comb_tr$ClaimAmount == 0,]
 
 # stratified sampling
 # info dataset
+info_tr$VehPower = as.numeric(info_tr$VehPower)
+info_tr$VehAge = as.numeric(info_tr$VehAge)
+info_tr$DrivAge = as.numeric(info_tr$DrivAge)
+
 testzero = info_tr[-traincalzeroind,] 
 calzero = info_tr[calzeroind,] 
 trainzero = info_tr[setdiff(traincalzeroind,calzeroind),] 
@@ -155,6 +160,7 @@ info_tr_cal = rbind(calzero, calnz)
 info_tr_test = rbind(testzero, testnz)
 
 
+
 # comb dataset, not stratified sampling as only using data with non zero claims
 comb_tr_test = comb_tr[-traincalind,] 
 comb_tr_cal = comb_tr[calind,] 
@@ -162,34 +168,3 @@ comb_tr_train = comb_tr[setdiff(traincalind,calind),]
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-## Data Edit ----
-# Merge datasets based on matching IDpol
-# When merging datasets, duplicate rows are created for those who have made more then 1 claim.
-freMTPL2_Amount_per_claim <- merge(freMTPL2freq, freMTPL2sev, by = "IDpol", all.x = TRUE)
-
-# This data set is used to model amount of claims
-freMTPL2_Amount_per_claim <- freMTPL2_Amount_per_claim[, names(freMTPL2_Amount_per_claim) != "ClaimNb"]
-
-# Group freMTPL2sev by IDpol and sum ClaimAmount
-freMTPL2sev_Claim_number <- freMTPL2sev %>%
-  group_by(IDpol) %>%
-  summarise(ClaimAmount = sum(ClaimAmount))
-
-#This Dataset is used to model Amount per claim
-freMTPL2_Claim_number <- merge(freMTPL2freq, freMTPL2sev_Claim_number, by = "IDpol", all.x = TRUE)
-
-# Create new variable with any claimNb over 4 grouped at 4
-freMTPL2_Claim_number$ClaimNb_cap <- pmin(freMTPL2_Agd$ClaimNb, 4)
-freMTPL2freq$ClaimNb_cap <- pmin(freMTPL2freq$ClaimNb, 4)
