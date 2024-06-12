@@ -57,13 +57,15 @@ nonzeroind = which(info$ClaimNb > 0)
 
 set.seed(100)
 traincalzeroind = sample(zeroind, floor(0.8*length(zeroind)))
-testzero = info[-traincalzeroind,] 
+# testzero = info[-traincalzeroind,] 
+testzero = info[setdiff(zeroind,traincalzeroind),] 
 calzeroind = sample(traincalzeroind, floor(0.0625*length(zeroind)))
 calzero = info[calzeroind,] 
 trainzero = info[setdiff(traincalzeroind,calzeroind),] 
 
 traincalnzind = sample(nonzeroind, floor(0.8*length(nonzeroind)))
-testnz = info[-traincalnzind,] 
+# testnz = info[-traincalnzind,] 
+testnz = info[setdiff(nonzeroind,traincalnzind),] 
 calnzind = sample(traincalnzind, floor(0.0625*length(nonzeroind)))
 calnz = info[calnzind,] 
 trainnz = info[setdiff(traincalnzind,calnzind),] 
