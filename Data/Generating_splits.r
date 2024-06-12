@@ -21,7 +21,7 @@ load(url(url))
     # Then in order to get the conformal intervals and check the coverage for the total claims we use the same split as used for the info set
 
   # Using stratified sampling to generate the 3 sets
-    # That is within
+
 #### Original ####
 info = freMTPL2freq ; claims = freMTPL2sev
 rm(freMTPL2freq);rm(freMTPL2sev)
@@ -54,6 +54,8 @@ comb = comb[!comb$ClaimAmount == 0,]
 zeroind = which(info$ClaimNb == 0)
 nonzeroind = which(info$ClaimNb > 0)
 
+
+set.seed(100)
 traincalzeroind = sample(zeroind, floor(0.8*length(zeroind)))
 testzero = info[-traincalzeroind,] 
 calzeroind = sample(traincalzeroind, floor(0.0625*length(zeroind)))
