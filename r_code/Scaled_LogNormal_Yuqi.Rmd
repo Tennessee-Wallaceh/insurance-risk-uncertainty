@@ -42,7 +42,7 @@ library(caret)
 library(xgboost)
 
 X <- scaled_data[, -c(1:4,14)]
-y <- scaled_data$Scaled_ClaimNb
+y <- scaled_data$log_Scaled_ClaimNb
 
 # Applying label encoding to categorical features
 categorical_features <- sapply(X, is.factor)
@@ -80,10 +80,6 @@ params <- list(
 # XGBoost model
 xgb_model <- xgboost(params = params, data = dtrain, nrounds = 100, verbose = 0)
 
-```
-
-```{r}
-library(DescTools)
 ```
 
 

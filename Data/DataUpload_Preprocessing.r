@@ -51,5 +51,5 @@ freMTPL2sev_Claim_number <- freMTPL2sev %>%
 freMTPL2_Claim_number <- merge(freMTPL2freq, freMTPL2sev_Claim_number, by = "IDpol", all.x = TRUE)
 
 # Create new variable with any claimNb over 4 grouped at 4
-freMTPL2_Claim_number$ClaimNb_cap <- pmin(freMTPL2_Agd$ClaimNb, 4)
+freMTPL2_Claim_number$ClaimNb_cap <- pmin(freMTPL2_Claim_number$ClaimNb, 4)
 freMTPL2freq$ClaimNb_cap <- pmin(freMTPL2freq$ClaimNb, 4)

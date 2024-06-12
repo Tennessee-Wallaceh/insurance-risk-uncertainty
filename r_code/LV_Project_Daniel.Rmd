@@ -26,11 +26,11 @@ The main problem is that each 'class' of Nbclaims far outweighs the previous cla
 
 ```{r}
 par(mfrow=c(1,5))
-hist(data$ClaimNb, main = 'Original Dist. of #Claims', xlab = '#Claims')
-hist(data$ClaimNb[!data$ClaimNb==0], main = '#Claims ( -0 )', xlab = '#Claims')
-hist(data$ClaimNb[!(data$ClaimNb %in% c(0,1))], main = '#Claims ( -0,1 )', xlab = '#Claims')
-hist(data$ClaimNb[!(data$ClaimNb %in% c(0,1,2))], main = '#Claims ( -0,1,2 )', xlab = '#Claims')
-hist(data$ClaimNb[!(data$ClaimNb %in% c(0,1,2,3))],, main = '#Claims ( -0,1,2,3 )', xlab = '#Claims')
+hist(data$ClaimNb, main = 'Original Dist. of #Claims', xlab = '#Claims',probability = T,col='darkred')
+hist(data$ClaimNb[!data$ClaimNb==0], main = '#Claims - ( 0 )', xlab = '#Claims',probability = T,col='darkred')
+hist(data$ClaimNb[!(data$ClaimNb %in% c(0,1))], main = '#Claims - ( 0,1 )', xlab = '#Claims',probability = T,col='darkred')
+hist(data$ClaimNb[!(data$ClaimNb %in% c(0,1,2))], main = '#Claims - ( 0,1,2 )', xlab = '#Claims',probability = T,col='darkred')
+hist(data$ClaimNb[!(data$ClaimNb %in% c(0,1,2,3))],, main = '#Claims - ( 0,1,2,3 )', xlab = '#Claims',probability = T,col='darkred')
 ```
 # Trying scaled Nb with Exposure
 
@@ -46,10 +46,10 @@ nozeros <- scaled_data$Scaled_ClaimNb[scaled_data$Scaled_ClaimNb!=0]
 par(mfrow=c(1,2))
 
 x <- scaled_data$Scaled_ClaimNb[scaled_data$Scaled_ClaimNb<50]
-hist(x, main = paste("Dist. of Scaled NbClaims"), probability = TRUE, breaks = 50,xlab='Scaled NbClaims')
+hist(x, main = paste("Dist. of Scaled NbClaims"), probability = TRUE, breaks = 50,xlab='Scaled NbClaims',col='darkred')
 
 x <- nozeros[nozeros<50]
-hist(x, main = paste("Dist. of Scaled NbClaims (0 removed)"), probability = TRUE, breaks = 50,xlab='Scaled NbClaims')
+hist(x, main = paste("Dist. of Scaled NbClaims (0 removed)"), probability = TRUE, breaks = 50,xlab='Scaled NbClaims',col='darkred')
 ```
 
 
