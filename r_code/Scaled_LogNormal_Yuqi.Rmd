@@ -125,11 +125,11 @@ predictions_glm <- exp(predict(glm_model, newdata = scaled_data_test, type = "re
 hist(predictions_glm)
 
 # MSE for GLM
-mse_glm <- mean((predictions_glm - scaled_data_test$log_Scaled_ClaimNb)^2)
+mse_glm <- mean((predictions_glm - info_tr_test$ClaimNb_cap/info_tr_test$Exposure)^2)
 print(paste("GLM MSE:", mse_glm))
 
 # Gini for GLM
-gini_glm <- calculate_gini(scaled_data_test$log_Scaled_ClaimNb, predictions_glm)
+gini_glm <- calculate_gini(info_tr_test$ClaimNb_cap/info_tr_test$Exposure, predictions_glm)
 print(paste("GLM Gini:", gini_glm))
 
 ```
@@ -137,14 +137,15 @@ print(paste("GLM Gini:", gini_glm))
 ```{r}
 # XGBoost
 predictions_xgb <- predict(xgb_model, dtest)
+predictions_xgb <- exp(predictions_xgb) - 1
 hist(predictions_xgb)
 
 # MSE for XGBoost
-mse_xgb <- mean((predictions_xgb - y_test)^2)
+mse_xgb <- mean((predictions_xgb - info_tr_test$ClaimNb_cap/info_tr_test$Exposure)^2)
 print(paste("XGBoost MSE:", mse_xgb))
 
 # Gini for XGBoost
-gini_xgb <- calculate_gini(y_test, predictions_xgb)
+gini_xgb <- calculate_gini(info_tr_test$ClaimNb_cap/info_tr_test$Exposure, predictions_xgb)
 print(paste("XGBoost Gini:", gini_xgb))
 
 ```
