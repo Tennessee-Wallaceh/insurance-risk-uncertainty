@@ -11,28 +11,27 @@ from scipy.stats import norm
 # In this script I will try to use XGboost with Conformal Prediction
 
 # Load data
-data = pd.read_csv('merged_data.csv')
+# data = pd.read_csv('merged_data.csv')
+comb_tr_train =pd.read_csv('Data/comb_tr_train.csv')
 # remove first column
-data = data.drop(columns=['Unnamed: 0'])
-# remove all rows with ClaimNb equal to zero
-data = data[data['ClaimNb'] != 0]
-# Only keep the values less than the 95% quantile
-data = data[data['ClaimAmount'] < data['ClaimAmount'].quantile(0.95)]
+comb_tr_train = comb_tr_train.drop(columns=['Unnamed: 0'])
 
 categorical_columns = ['VehPower', 'VehAge', 'VehBrand', 'VehGas', 'Area', 'Region']
 for col in categorical_columns:
-    data[col] = data[col].astype('category')
+    comb_tr_train[col] = comb_tr_train[col].astype('category')
 
-X = data.drop(columns=['ClaimAmount'])
-y = data['ClaimAmount']
+# print column names
+print(comb_tr_train.columns)
+X_train = comb_tr_train.drop(columns=['ClaimAmount', 'Exposure', 'ClaimNb', 'ClaimNb_cap'])
+y_train = comb_tr_train['ClaimAmount']
 
 # Split data into train+calibration and validation sets
-X_train_cal, X_val, y_train_cal, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+# X_train_cal, X_val, y_train_cal, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
 
 # Split train+calibration set into training and calibration sets
-X_train, X_cal, y_train, y_cal = train_test_split(X_train_cal, y_train_cal, test_size=0.25, random_state=42)  # 0.25 * 0.8 = 0.2
+#X_train, X_cal, y_train, y_cal = train_test_split(X_train_cal, y_train_cal, test_size=0.25, random_state=42)  # 0.25 * 0.8 = 0.2
 
-dtrain = xgb.DMatrix(X_train, label=y_train)
+dtrain = xgb.DMatrix(X_train, label=y_train, enable_categorical=True)
 
 params = {
 'n_estimators': 500, 'max_depth': 3, 'learning_rate': 0.01, 'colsample_bytree': 0.5, 'alpha': 10
