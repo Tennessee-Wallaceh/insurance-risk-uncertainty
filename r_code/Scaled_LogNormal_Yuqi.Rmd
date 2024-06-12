@@ -18,7 +18,7 @@ scaled_data_test <- scaled_data_test[, -c(2,3,13)]
 ```{r}
 # log-transformation
 scaled_data_train$log_Scaled_ClaimNb <- log(scaled_data_train$Scaled_ClaimNb + 1)
-scaled_data_train <- scaled_data_train[scaled_data_train$Scaled_ClaimNb < quantile(scaled_data_train$Scaled_ClaimNb, 0.99),]
+#scaled_data_train <- #scaled_data_train[scaled_data_train$Scaled_ClaimNb < quantile(scaled_data_train$Scaled_ClaimNb, 0.99),]
 
 # Categorical to factors
 scaled_data_train$Area <- as.factor(scaled_data_train$Area)
@@ -30,7 +30,7 @@ scaled_data_train <- scaled_data_train[, -c(1)]
 
 # log-transformation
 scaled_data_test$log_Scaled_ClaimNb <- log(scaled_data_test$Scaled_ClaimNb + 1)
-scaled_data_test <- scaled_data_test[scaled_data_test$Scaled_ClaimNb < quantile(scaled_data_test$Scaled_ClaimNb, 0.99),]
+#scaled_data_test <- #scaled_data_test[scaled_data_test$Scaled_ClaimNb < quantile(scaled_data_test$Scaled_ClaimNb, 0.99),]
 
 # Categorical to factors
 scaled_data_test$Area <- as.factor(scaled_data_test$Area)
@@ -149,6 +149,89 @@ print(paste("XGBoost Gini:", gini_xgb))
 
 ```
 The very high Gini coefficients and show that GLM and XGBoost both effectively discriminate between different outcomes. It ranks the predictions very well relative to the actual data.
+
+
+```{r}
+# Reverse transformation log(Scaled_ClaimNb + 1)
+predicted_scaled_claim_nb_glm <- exp(predictions_glm) - 1
+predicted_scaled_claim_nb_xgb <- exp(predictions_xgb) - 1
+
+hist(predicted_scaled_claim_nb_glm)
+hist(predicted_scaled_claim_nb_xgb)
+
+predicted_claimNb_glm <- predicted_scaled_claim_nb_glm * info_tr_test$Exposure
+predicted_claimNb_xgb <- predicted_scaled_claim_nb_xgb * info_tr_test$Exposure
+
+hist(predicted_claimNb_glm)
+hist(predicted_claimNb_xgb)
+
+```
+
+```{r}
+# Binary classification of predictions
+binary_predictions_glm <- ifelse(predicted_claimNb_glm > 0.05, 1, 0)
+binary_predictions_xgb <- ifelse(predicted_claimNb_xgb > 0.05, 1, 0)
+
+# Actual binary values
+binary_actuals <- ifelse(info_test$ClaimNb_cap > 0, 1, 0)
+
+```
+
+```{r}
+length(binary_predictions_glm)
+length(binary_predictions_xgb)
+length(binary_actuals)
+```
+
+```{r}
+library(caret)
+
+# Confusion matrix for GLM
+confusion_matrix_glm <- confusionMatrix(factor(binary_predictions_glm), factor(binary_actuals))
+print(confusion_matrix_glm)
+
+# Confusion matrix for XGBoost
+confusion_matrix_xgb <- confusionMatrix(factor(binary_predictions_xgb), factor(binary_actuals))
+print(confusion_matrix_xgb)
+
+```
+
+
+```{r}
+min_length <- min(length(binary_predictions_glm), length(binary_predictions_xgb), length(binary_actuals))
+
+data_for_plot <- data.frame(
+  Actual = binary_actuals[1:min_length],
+  GLM_Predictions = binary_predictions_glm[1:min_length],
+  XGB_Predictions = binary_predictions_xgb[1:min_length]
+)
+
+library(reshape2)
+
+melted_data <- melt(data_for_plot, id.vars = NULL, variable.name = "Model", value.name = "Claim Status")
+
+```
+```{r}
+library(ggplot2)
+
+ggplot(melted_data, aes(x = as.factor(`Claim Status`), fill = Model)) +
+  geom_bar(position = "dodge", stat="count") +
+  scale_x_discrete(labels = c("Zero", "Non-Zero")) + 
+  labs(title = "Comparison of Actual and Predicted Claims (Binary)",
+       x = "Claim Status",
+       y = "Count",
+       fill = "Model Type") +
+  facet_wrap(~ Model, scales = "free_y") + 
+  theme_minimal()
+
+
+```
+
+
+```{r}
+prob_claimNb_xgb <- 1 - exp(-predicted_claimNb_xgb)
+```
+
 
 
 
