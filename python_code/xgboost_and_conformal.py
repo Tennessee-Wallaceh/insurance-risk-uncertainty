@@ -1,4 +1,6 @@
 # Trying point estimation on the claim amoount using standard xgboost
+# And absolute difference as score function for conformal prediction
+
 
 import numpy as np
 import xgboost as xgb
@@ -86,14 +88,6 @@ for col in categorical_columns:
 print(comb_tr_cal.columns)
 X_cal = comb_tr_cal.drop(columns=['IDpol','ClaimAmount', 'Exposure', 'ClaimNb', 'ClaimNb_cap'])
 y_cal = comb_tr_cal['ClaimAmount']
-
-
-
-# Split data into train+calibration and validation sets
-# X_train_cal, X_val, y_train_cal, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
-
-# Split train+calibration set into training and calibration sets
-#X_train, X_cal, y_train, y_cal = train_test_split(X_train_cal, y_train_cal, test_size=0.25, random_state=42)  # 0.25 * 0.8 = 0.2
 
 dcal= xgb.DMatrix(X_cal, label=y_cal, enable_categorical=True)
 
