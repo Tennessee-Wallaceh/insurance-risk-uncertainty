@@ -149,11 +149,11 @@ info_tr$VehPower = as.numeric(info_tr$VehPower)
 info_tr$VehAge = as.numeric(info_tr$VehAge)
 info_tr$DrivAge = as.numeric(info_tr$DrivAge)
 
-testzero = info_tr[-traincalzeroind,] 
+testzero = info[setdiff(zeroind,traincalzeroind),] 
 calzero = info_tr[calzeroind,] 
 trainzero = info_tr[setdiff(traincalzeroind,calzeroind),] 
 
-testnz = info[-traincalnzind,] 
+testnz = info[setdiff(nonzeroind,traincalnzind),] 
 calnz = info[calnzind,] 
 trainnz = info[setdiff(traincalnzind,calnzind),] 
 
