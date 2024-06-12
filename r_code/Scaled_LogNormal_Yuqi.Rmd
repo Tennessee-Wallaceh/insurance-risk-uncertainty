@@ -235,9 +235,177 @@ ggplot(melted_data, aes(x = as.factor(`Claim Status`), fill = Model)) +
 
 
 ```{r}
-prob_claimNb_xgb <- 1 - exp(-predicted_claimNb_xgb)
+nonzero_indices <- which(info_tr_test$ClaimNb_cap/info_tr_test$Exposure > 0)
+
+mse_nonzero_glm <- mean((predictions_glm[nonzero_indices] - (info_tr_test$ClaimNb_cap/info_tr_test$Exposure)[nonzero_indices])^2)
+
+mse_nonzero_xgb <- mean((predictions_xgb[nonzero_indices] - (info_tr_test$ClaimNb_cap/info_tr_test$Exposure)[nonzero_indices])^2)
+
+print(paste("GLM MSE for Nonzero Claims:", mse_nonzero_glm))
+print(paste("XGBoost MSE for Nonzero Claims:", mse_nonzero_xgb))
+
 ```
 
 
+```{r}
+library(stats)
 
+# Calculate probabilities
+calc_lognormal_probs <- function(predictions, exposure) {
+  probs <- sapply(0:4, function(k) {
+    lower_bound <- k / exposure
+    upper_bound <- (k + 1) / exposure
+    p_lower <- plnorm(lower_bound, meanlog = mean(predictions), sdlog = sd(predictions))
+    p_upper <- plnorm(upper_bound, meanlog = mean(predictions), sdlog = sd(predictions))
+    p_upper - p_lower
+  })
+  return(probs)
+}
+
+# Calculate probabilities for GLM and XGBoost models
+prob_glm <- calc_lognormal_probs(predictions_glm, mean(info_tr_test$Exposure))
+prob_xgb <- calc_lognormal_probs(predictions_xgb, mean(info_tr_test$Exposure))
+
+# Printing the probabilities
+print(prob_glm)
+print(prob_xgb)
+
+```
+
+## Binary probabilities
+
+```{r}
+# Binary PMF from binary predictions
+calc_binary_pmf <- function(binary_predictions) {
+
+  counts <- table(binary_predictions)
+  total_count <- length(binary_predictions)
+
+  prob_0 <- counts['0'] / total_count
+  prob_1 <- counts['1'] / total_count
+
+  if (is.na(prob_0)) prob_0 <- 0
+  if (is.na(prob_1)) prob_1 <- 0
+  
+  return(c(prob_0 = prob_0, prob_1 = prob_1))
+}
+
+# Binary PMF for GLM and XGBoost models
+binary_pmf_glm <- calc_binary_pmf(binary_predictions_glm)
+binary_pmf_xgb <- calc_binary_pmf(binary_predictions_xgb)
+
+print("Binary PMF for GLM:")
+print(binary_pmf_glm)
+print("Binary PMF for XGBoost:")
+print(binary_pmf_xgb)
+
+```
+
+## For non-zero claims
+
+```{r}
+# Filter training data for non-zero claims
+train_nonzero <- info_tr_train[info_tr_train$ClaimNb_cap / info_tr_train$Exposure > 0, ]
+train_nonzero$Scaled_ClaimNb <- train_nonzero$ClaimNb_cap /train_nonzero$Exposure
+train_nonzero$log_Scaled_ClaimNb <- log(train_nonzero$Scaled_ClaimNb + 1)
+
+# Filter testing data for non-zero claims
+test_nonzero <- info_tr_test[info_tr_test$ClaimNb_cap / info_tr_test$Exposure > 0, ]
+test_nonzero$Scaled_ClaimNb <- test_nonzero$ClaimNb_cap /test_nonzero$Exposure
+test_nonzero$log_Scaled_ClaimNb <- log(test_nonzero$Scaled_ClaimNb + 1)
+
+train_nonzero$VehGas <- as.factor(train_nonzero$VehGas)
+test_nonzero$VehGas <- as.factor(test_nonzero$VehGas)
+
+categorical_features <- sapply(train_nonzero, is.factor)
+train_nonzero[categorical_features] <- lapply(train_nonzero[categorical_features], function(x) as.integer(as.factor(x)))
+
+categorical_features <- sapply(test_nonzero, is.factor)
+test_nonzero[categorical_features] <- lapply(test_nonzero[categorical_features], function(x) as.integer(as.factor(x)))
+
+X_train_nonzero <- as.matrix(train_nonzero[, -c(1,2,12,13,14)]) 
+y_train_nonzero <- train_nonzero$log_Scaled_ClaimNb
+
+X_test_nonzero <- as.matrix(test_nonzero[, -c(1,2,12,13,14)])
+y_test_nonzero <- test_nonzero$log_Scaled_ClaimNb
+
+```
+
+```{r}
+dtrain_nonzero <- xgb.DMatrix(data = X_train_nonzero, label = y_train_nonzero)
+dtest_nonzero <- xgb.DMatrix(data = X_test_nonzero, label = y_test_nonzero)
+
+# XGBoost model parameters
+params_nonzero <- list(
+  booster = "gbtree",
+  objective = "reg:squaredlogerror", 
+  eta = 0.1,
+  max_depth = 6,
+  subsample = 0.5,
+  colsample_bytree = 0.7
+)
+
+xgb_model_nonzero <- xgboost(params = params_nonzero, data = dtrain_nonzero, nrounds = 100, verbose = 0)
+
+```
+
+```{r}
+predictions_nonzero <- predict(xgb_model_nonzero, dtest_nonzero)
+
+predictions_nonzero <- exp(predictions_nonzero) - 1
+predictions_nonzero <- predictions_nonzero * test_nonzero$Exposure
+
+summary(predictions_nonzero)
+hist(predictions_nonzero)
+
+```
+
+```{r}
+# Round predictions
+rounded_predictions_nonzero <- round(predictions_nonzero)
+```
+
+```{r}
+pmf_counts <- table(rounded_predictions_nonzero)
+pmf_total <- sum(pmf_counts)
+
+pmf_probabilities <- pmf_counts / pmf_total
+
+# Ensure we have probabilities for 0 through 4
+required_values <- 0:4
+nonzero_pmf_probabilities <- sapply(required_values, function(x) {
+  if(x %in% names(pmf_probabilities)) {
+    as.numeric(pmf_probabilities[as.character(x)])
+  } else {
+    0
+  }
+})
+
+names(nonzero_pmf_probabilities) <- required_values
+
+print(nonzero_pmf_probabilities)
+
+```
+
+## Total PMF
+
+```{r}
+overall_pmf <- numeric(5)  
+
+overall_pmf[1] <- binary_pmf_xgb[1] 
+
+if(length(nonzero_pmf_probabilities) > 0) {
+  for (k in 1:4) {
+    if(k <= length(nonzero_pmf_probabilities)) {
+      overall_pmf[k + 1] <- binary_pmf_xgb[2] * nonzero_pmf_probabilities[k]
+    } else {
+      overall_pmf[k + 1] <- 0 
+    }
+  }
+}
+
+names(overall_pmf) <- 0:4 
+print(overall_pmf)
+
+```
 
