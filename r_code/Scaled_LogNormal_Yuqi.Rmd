@@ -169,6 +169,12 @@ hist(predicted_claimNb_xgb)
 ```
 
 ```{r}
+prob_claimNb_xgb <- 1 - exp(-predicted_claimNb_xgb)
+prob_claimNb_xgb
+```
+
+
+```{r}
 # Binary classification of predictions
 binary_predictions_glm <- ifelse(predicted_claimNb_glm > 0.05, 1, 0)
 binary_predictions_xgb <- ifelse(predicted_claimNb_xgb > 0.05, 1, 0)
