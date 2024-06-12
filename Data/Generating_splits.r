@@ -57,13 +57,15 @@ nonzeroind = which(info$ClaimNb > 0)
 
 set.seed(100)
 traincalzeroind = sample(zeroind, floor(0.8*length(zeroind)))
-testzero = info[-traincalzeroind,] 
+# testzero = info[-traincalzeroind,] 
+testzero = info[setdiff(zeroind,traincalzeroind),] 
 calzeroind = sample(traincalzeroind, floor(0.0625*length(zeroind)))
 calzero = info[calzeroind,] 
 trainzero = info[setdiff(traincalzeroind,calzeroind),] 
 
 traincalnzind = sample(nonzeroind, floor(0.8*length(nonzeroind)))
-testnz = info[-traincalnzind,] 
+# testnz = info[-traincalnzind,] 
+testnz = info[setdiff(nonzeroind,traincalnzind),] 
 calnzind = sample(traincalnzind, floor(0.0625*length(nonzeroind)))
 calnz = info[calnzind,] 
 trainnz = info[setdiff(traincalnzind,calnzind),] 
@@ -147,11 +149,11 @@ info_tr$VehPower = as.numeric(info_tr$VehPower)
 info_tr$VehAge = as.numeric(info_tr$VehAge)
 info_tr$DrivAge = as.numeric(info_tr$DrivAge)
 
-testzero = info_tr[-traincalzeroind,] 
+testzero = info[setdiff(zeroind,traincalzeroind),] 
 calzero = info_tr[calzeroind,] 
 trainzero = info_tr[setdiff(traincalzeroind,calzeroind),] 
 
-testnz = info[-traincalnzind,] 
+testnz = info[setdiff(nonzeroind,traincalnzind),] 
 calnz = info[calnzind,] 
 trainnz = info[setdiff(traincalnzind,calnzind),] 
 
