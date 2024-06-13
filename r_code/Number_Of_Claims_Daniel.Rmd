@@ -1,0 +1,156 @@
+---
+title: "Number_O_Claims"
+author: "Daniel Gardner"
+date: "2024-06-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Loading data
+load(url("https://github.com/dutangc/CASdatasets/blob/master/data/freMTPL2freq.rda?raw=true"))
+```
+
+```{r}
+# Preprocessing
+PreProcess <- function(dataframe){
+  
+  data <- info_tr_train
+  names <- colnames(info_tr_train)
+  
+  # Adding scaled data column
+  data <- cbind(data$ClaimNb/data$Exposure,data)
+  colnames(data) <- c("ScaledClaims",names)
+  
+  # Rounding scaled claims (For Poisson)
+  data$ScaledClaims <- round(data$ScaledClaims)
+  
+  # Optional removal of outliers?
+  data <- data[data$ScaledClaims < 30,]
+  
+  # Setting integer to integer
+  for (column in c("VehPower", "VehAge","DrivAge")){
+    data[,column] <- as.integer(data[,column])
+  }
+  
+  # Setting factor to factor 
+  for (column in c("VehGas", "Area")){
+    data[,column] <- as.factor(data[,column])
+  }
+  
+  # Shuffling data
+  data <- data[sample(dim(data)[1]),]
+  
+  return(data)
+  
+}
+
+train_data <- PreProcess(info_tr_train)
+test_data <- PreProcess(info_tr_test)
+cal_data <- PreProcess(info_tr_cal)
+
+head(train_data)
+```
+
+
+```{r}
+hist(train_data$ScaledClaims[train_data$ScaledClaims!=0])
+```
+
+
+```{r}
+library(dplyr)
+# Stratified sampling for test n train data
+
+# Grouping by whether data is 0 or not
+#data <- cbind(data,Bool = data$ScaledClaims==0)
+
+# Splitting based off 0 or not
+#train_data <- data %>%
+#                  group_by(Bool) %>%
+#                  sample_frac(size=.8)
+
+# Test data is all data not present in training data
+#test_data <- data[!(data$IDpol %in% train_data$IDpol),]
+
+# Shuffle around training data
+#train_data <- train_data[sample(dim(train_data)[1]),]
+```
+
+
+
+```{r}
+library(pscl)
+# TRAINING ZERO INFLATED POISSON ON TRAINING DATA
+
+# Attempt 1
+
+ZIPModel <- zeroinfl(ScaledClaims ~ VehPower + VehAge + DrivAge + BonusMalus + VehBrand + VehGas + Area + Density + Region, data = train_data, dist = "negbin", link = "logit")
+
+summary(ZIPModel)
+```
+
+```{r}
+library(Metrics)
+preds <-predict(ZIPModel, newdata = test_data[,-1], type='response')
+
+# Finding RMSE
+data_rmse <- rmse(test_data$ScaledClaims,preds)
+
+# GINI code from Yuqi
+calculate_gini <- function(actual, predicted) {
+
+  df <- data.frame(actual = actual, predicted = predicted)
+  df <- df[order(df$predicted),]
+
+  # Calculate the cumulative sums of actual values
+  cum_actuals <- cumsum(df$actual) / sum(df$actual)
+  cum_predicted = cumsum(df$predicted) / sum(df$predicted)
+  
+  # Area under the Lorenz curve
+  Lorenz = cumsum(sort(df$actual) / sum(df$actual))
+  B = sum(Lorenz[-length(Lorenz)]) / (length(Lorenz) - 1)
+
+  # Area above the Lorenz curve
+  A = 0.5 - B
+  gini = (A / 0.5)
+
+  return(gini)
+}
+
+data_gini <- calculate_gini(test_data$ScaledClaims,preds)
+
+print(paste("The RMSE for the data was",data_rmse))
+print(paste("The GINI for the data was",data_gini))
+```
+
+```{r}
+PMF_Predictions <- function(dataframe){
+  
+  N <- dim(dataframe)[1]
+  preds <- matrix(NA,nrow=N,ncol=5)
+  lambdas <- predict(ZIPModel, newdata = dataframe[,-1], type='response')
+  
+  for (i in 1:N){
+    
+    preds[i,1] <- dpois(0,lambda=lambdas[i])
+    preds[i,2] <- dpois(1,lambda=lambdas[i])
+    preds[i,3] <- dpois(2,lambda=lambdas[i])
+    preds[i,4] <- dpois(3,lambda=lambdas[i])
+    preds[i,5] <- dpois(4,lambda=lambdas[i])
+    
+  }
+  colnames(preds) <- c(0,1,2,3,4)
+  return(as.data.frame(preds))
+  
+}
+
+# FINAL OUTPUT OF PROBABILITY VECTORS
+
+test_set_preds <- PMF_Predictions(test_data)
+cal_set_preds <- PMF_Predictions(cal_data)
+```
+
