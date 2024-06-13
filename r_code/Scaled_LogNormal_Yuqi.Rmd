@@ -199,6 +199,17 @@ print(paste("XGBoost MSE for Nonzero Claims:", mse_nonzero_xgb))
 ### Transform to binary 
 
 ```{r}
+hist(predictions_glm)
+hist(predictions_xgb)
+
+predicted_claimNb_glm <- predictions_glm * info_tr_test$Exposure
+predicted_claimNb_xgb <- predictions_xgb * info_tr_test$Exposure
+
+hist(predicted_claimNb_glm)
+hist(predicted_claimNb_xgb)
+```
+
+```{r}
 # Binary classification of predictions
 binary_predictions_glm <- ifelse(predicted_claimNb_glm > 0.05, 1, 0)
 binary_predictions_xgb <- ifelse(predicted_claimNb_xgb > 0.05, 1, 0)
@@ -233,7 +244,7 @@ calculate_gini(predicted_claimNb_xgb, info_tr_test$ClaimNb_cap)
 ```
 
 
-```{r}
+```{r message=FALSE}
 min_length <- min(length(binary_predictions_glm), length(binary_predictions_xgb), length(binary_actuals))
 
 data_for_plot <- data.frame(
@@ -266,17 +277,6 @@ ggplot(melted_data, aes(x = as.factor(`Claim Status`), fill = Model)) +
 ## Output Predicted Probabilities
 
 ### For each observation vector
-
-```{r}
-hist(predictions_glm)
-hist(predictions_xgb)
-
-predicted_claimNb_glm <- predictions_glm * info_tr_test$Exposure
-predicted_claimNb_xgb <- predictions_xgb * info_tr_test$Exposure
-
-hist(predicted_claimNb_glm)
-hist(predicted_claimNb_xgb)
-```
 
 Typically, GLM and XGBoost do not output probabilities directly for regression tasks. Instead, they provide direct predictions of the outcome variable. We provide two attempts here.
 
