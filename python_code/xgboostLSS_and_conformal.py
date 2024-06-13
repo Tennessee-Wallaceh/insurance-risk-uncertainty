@@ -188,6 +188,13 @@ pred_quantiles_val = xgblss.predict(dval,
 pred_quantiles_val.iloc[:,0] = pred_quantiles_val.iloc[:,0] - q_hat
 pred_quantiles_val.iloc[:,1] = pred_quantiles_val.iloc[:,1] + q_hat
 
+# Calculate coverage and average length of the intervals
+coverage = np.mean((y_val >= pred_quantiles_val.iloc[:, 0]) & (y_val <= pred_quantiles_val.iloc[:, 1]))
+average_length = np.mean(pred_quantiles_val.iloc[:, 1] - pred_quantiles_val.iloc[:, 0])
+
+print(f'Coverage: {coverage}')
+print(f'Average Length: {average_length}')
+
 # histogram of interval sizes
 plt.hist(pred_quantiles_val.iloc[:, 1] - pred_quantiles_val.iloc[:, 0], bins=20)
 plt.xlabel('Interval Size')
@@ -195,7 +202,7 @@ plt.ylabel('Frequency')
 plt.title('Histogram of Prediction Interval Sizes')
 plt.show()
 
-
+#####################################################################################
 # plot dval ClaimAmount against DrivAge with intervals
 
 def replace_with_mode_or_mean(df):
@@ -216,21 +223,32 @@ var_to_plot = 'VehPower'
 var_to_plot = 'VehAge'
 var_to_plot = 'VehGas'
 var_to_plot = 'BonusMalus'
+var_to_plot = 'Density'
+
 
 X_drivage_plot = X_val.copy()
 X_drivage_plot = replace_with_mode_or_mean(X_drivage_plot)
-X_drivage_plot = X_drivage_plot.head(X_train[var_to_plot].nunique())
 
+# for categorical
+X_drivage_plot = X_drivage_plot.head(X_train[var_to_plot].nunique())
 X_drivage_plot[var_to_plot] = sorted(X_val[var_to_plot].unique())
 
+# for continuous 
+# BonusMalus
 X_drivage_plot = X_drivage_plot.head(149)
 X_drivage_plot[var_to_plot] = list(range(1, X_val['BonusMalus'].max()))
+
+# Density
+dens_vec = np.arange(X_val['Density'].min(), X_val['Density'].max(), 0.1)
+X_drivage_plot = X_drivage_plot.head(dens_vec.shape[0])
+X_drivage_plot[var_to_plot] = dens_vec
 
 
 
 categorical_columns = ['VehPower', 'VehAge', 'VehBrand', 'VehGas', 'Area', 'Region', 'DrivAge']
 for col in categorical_columns:
     X_drivage_plot[col] = X_drivage_plot[col].astype('category')
+
 
 dplotDrivage = xgb.DMatrix(X_drivage_plot, nthread=n_cpu,  enable_categorical=True)
 pred_quantiles_val = xgblss.predict(dplotDrivage,
@@ -242,20 +260,28 @@ pred_quantiles_val.iloc[:,0] = pred_quantiles_val.iloc[:,0] - q_hat
 pred_quantiles_val.iloc[:,1] = pred_quantiles_val.iloc[:,1] + q_hat
 
 drivAGe_interval_size = pred_quantiles_val.iloc[:, 1] - pred_quantiles_val.iloc[:, 0]
-# bar plot
+
+# bar plot for categorical
+plt.ylim(4000, 5000)
 plt.bar(X_drivage_plot[var_to_plot], drivAGe_interval_size)
 plt.xlabel(var_to_plot)
 plt.ylabel('Interval Size')
-plt.title('Prediction Interval Sizes for ' + var_to_plot)
+plt.title('Prediction Interval Sizes against ' + var_to_plot)
+plt.savefig("Int_sizes_against_DrivAge.pdf")
 plt.show()
 
-# line plot interval size
+# line plot interval size - continuous
 plt.plot(X_drivage_plot[var_to_plot], drivAGe_interval_size)
 plt.xlabel(var_to_plot)
 plt.ylabel('Interval Size')
-plt.title('Prediction Interval Sizes for ' + var_to_plot)
+plt.title('Prediction Interval Sizes against ' + var_to_plot)
+plt.savefig("Int_sizes_against_BonusMalus.pdf")
 plt.show()
 
+
+X_train['DrivAge'].hist()
+X_train['BonusMalus'].hist()
+plt.show()
 
 
 
