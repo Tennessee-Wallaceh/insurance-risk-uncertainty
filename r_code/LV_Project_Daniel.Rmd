@@ -174,4 +174,10 @@ IfClaim_actual_class <- as.numeric(data1$ClaimNb[-indices])
 confusionMatrix(as.factor(IfClaim_pred_class), as.factor(IfClaim_actual_class))
 ```
 
+```{r}
+par(mfrow=c(1,2))
+hist(sev$ClaimAmount[sev$ClaimAmount],breaks=20,probability = T,col='darkblue',xlab="ClaimAmount (€)", main = " Original Distribution of ClaimAmount")
+
+hist(sev$ClaimAmount[sev$ClaimAmount < 5e3],breaks=20,probability = T,col='darkblue',xlab="ClaimAmount (€)", main = " Truncated Distribution of ClaimAmount")
+```
 
