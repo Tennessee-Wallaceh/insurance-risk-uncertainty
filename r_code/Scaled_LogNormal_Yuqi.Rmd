@@ -5,6 +5,8 @@ date: "2024-06-10"
 output: pdf_document
 ---
 
+## Data Preparation for the Three Datasets
+
 ```{r}
 scaled_data_train <- cbind(info_tr_train$ClaimNb_cap/info_tr_train$Exposure,info_tr_train)
 colnames(scaled_data_train) <- c("Scaled_ClaimNb",colnames(info_tr_train))
@@ -13,9 +15,14 @@ scaled_data_train <- scaled_data_train[, -c(2,3,13)]
 scaled_data_test <- cbind(info_tr_test$ClaimNb_cap/info_tr_test$Exposure,info_tr_test)
 colnames(scaled_data_test) <- c("Scaled_ClaimNb",colnames(info_tr_test))
 scaled_data_test <- scaled_data_test[, -c(2,3,13)]
+
+scaled_data_cal <- cbind(info_tr_cal$ClaimNb_cap/info_tr_cal$Exposure,info_tr_cal)
+colnames(scaled_data_cal) <- c("Scaled_ClaimNb",colnames(info_tr_cal))
+scaled_data_cal <- scaled_data_cal[, -c(2,3,13)]
 ```
 
 ```{r}
+# Train
 # log-transformation
 scaled_data_train$log_Scaled_ClaimNb <- log(scaled_data_train$Scaled_ClaimNb + 1)
 #scaled_data_train <- #scaled_data_train[scaled_data_train$Scaled_ClaimNb < quantile(scaled_data_train$Scaled_ClaimNb, 0.99),]
@@ -28,6 +35,7 @@ scaled_data_train$Region <- as.factor(scaled_data_train$Region)
 
 scaled_data_train <- scaled_data_train[, -c(1)]
 
+# Test
 # log-transformation
 scaled_data_test$log_Scaled_ClaimNb <- log(scaled_data_test$Scaled_ClaimNb + 1)
 #scaled_data_test <- #scaled_data_test[scaled_data_test$Scaled_ClaimNb < quantile(scaled_data_test$Scaled_ClaimNb, 0.99),]
@@ -39,10 +47,23 @@ scaled_data_test$VehGas <- as.factor(scaled_data_test$VehGas)
 scaled_data_test$Region <- as.factor(scaled_data_test$Region)
 
 scaled_data_test <- scaled_data_test[, -c(1)]
+
+# Cal
+# log-transformation
+scaled_data_cal$log_Scaled_ClaimNb <- log(scaled_data_cal$Scaled_ClaimNb + 1)
+
+# Categorical to factors
+scaled_data_cal$Area <- as.factor(scaled_data_cal$Area)
+scaled_data_cal$VehBrand <- as.factor(scaled_data_cal$VehBrand)
+scaled_data_cal$VehGas <- as.factor(scaled_data_cal$VehGas)
+scaled_data_cal$Region <- as.factor(scaled_data_cal$Region)
+
+scaled_data_cal <- scaled_data_cal[, -c(1)]
 ```
 
+## GLM
 
-```{r}
+```{r message=FALSE}
 library(nnet)
 library(MASS)
 
@@ -51,10 +72,9 @@ formula <- log_Scaled_ClaimNb ~as.factor(Area) + VehPower + VehAge + DrivAge + B
 
 glm_model <- glm(formula, data = scaled_data_train, family = gaussian())
 ```
+## XGBoost
 
-
-
-```{r}
+```{r message=FALSE}
 library(caret)
 library(xgboost)
 
@@ -62,6 +82,8 @@ X_train <- scaled_data_train[, -c(10)]
 y_train <- scaled_data_train$log_Scaled_ClaimNb
 X_test <- scaled_data_test[, -c(10)]
 y_test <- scaled_data_test$log_Scaled_ClaimNb
+X_cal <- scaled_data_cal[, -c(10)]
+y_cal <- scaled_data_cal$log_Scaled_ClaimNb
 
 categorical_features <- sapply(X_train, is.factor)
 X_train[categorical_features] <- lapply(X_train[categorical_features], function(x) as.integer(as.factor(x)))
@@ -69,13 +91,17 @@ X_train[categorical_features] <- lapply(X_train[categorical_features], function(
 categorical_features <- sapply(X_test, is.factor)
 X_test[categorical_features] <- lapply(X_test[categorical_features], function(x) as.integer(as.factor(x)))
 
+categorical_features <- sapply(X_cal, is.factor)
+X_cal[categorical_features] <- lapply(X_cal[categorical_features], function(x) as.integer(as.factor(x)))
+
 X_train <- as.matrix(X_train)
 X_test <- as.matrix(X_test)
+X_cal <- as.matrix(X_cal)
 
 # Converting to DMatrix for XGBoost
 dtrain <- xgb.DMatrix(data = X_train, label = y_train)
 dtest <- xgb.DMatrix(data = X_test, label = y_test)
-
+dcal <- xgb.DMatrix(data = X_cal, label = y_cal)
 ```
 
 ```{r}
@@ -94,6 +120,8 @@ xgb_model <- xgboost(params = params, data = dtrain, nrounds = 100, verbose = 0)
 
 ```
 
+
+## Performance Evaluation
 
 ```{r}
 calculate_gini <- function(actual, predicted) {
@@ -117,6 +145,8 @@ calculate_gini <- function(actual, predicted) {
 }
 
 ```
+
+### For predictor ClaimNb/Exposure
 
 ```{r}
 # GLM
@@ -152,27 +182,21 @@ print(paste("XGBoost Gini:", gini_xgb))
 The very high Gini coefficients and show that GLM and XGBoost both effectively discriminate between different outcomes. It ranks the predictions very well relative to the actual data.
 
 
+### For non-zero claims
+
 ```{r}
-# Reverse transformation log(Scaled_ClaimNb + 1)
-predicted_scaled_claim_nb_glm <- exp(predictions_glm) - 1
-predicted_scaled_claim_nb_xgb <- exp(predictions_xgb) - 1
+nonzero_indices <- which(info_tr_test$ClaimNb_cap/info_tr_test$Exposure > 0)
 
-hist(predicted_scaled_claim_nb_glm)
-hist(predicted_scaled_claim_nb_xgb)
+mse_nonzero_glm <- mean((predictions_glm[nonzero_indices] - (info_tr_test$ClaimNb_cap/info_tr_test$Exposure)[nonzero_indices])^2)
 
-predicted_claimNb_glm <- predicted_scaled_claim_nb_glm * info_tr_test$Exposure
-predicted_claimNb_xgb <- predicted_scaled_claim_nb_xgb * info_tr_test$Exposure
+mse_nonzero_xgb <- mean((predictions_xgb[nonzero_indices] - (info_tr_test$ClaimNb_cap/info_tr_test$Exposure)[nonzero_indices])^2)
 
-hist(predicted_claimNb_glm)
-hist(predicted_claimNb_xgb)
+print(paste("GLM MSE for Nonzero Claims:", mse_nonzero_glm))
+print(paste("XGBoost MSE for Nonzero Claims:", mse_nonzero_xgb))
 
 ```
 
-```{r}
-prob_claimNb_xgb <- 1 - exp(-predicted_claimNb_xgb)
-prob_claimNb_xgb
-```
-
+### Transform to binary 
 
 ```{r}
 # Binary classification of predictions
@@ -239,18 +263,128 @@ ggplot(melted_data, aes(x = as.factor(`Claim Status`), fill = Model)) +
 
 ```
 
+## Output Predicted Probabilities
+
+### For each observation vector
 
 ```{r}
-nonzero_indices <- which(info_tr_test$ClaimNb_cap/info_tr_test$Exposure > 0)
+hist(predictions_glm)
+hist(predictions_xgb)
 
-mse_nonzero_glm <- mean((predictions_glm[nonzero_indices] - (info_tr_test$ClaimNb_cap/info_tr_test$Exposure)[nonzero_indices])^2)
+predicted_claimNb_glm <- predictions_glm * info_tr_test$Exposure
+predicted_claimNb_xgb <- predictions_xgb * info_tr_test$Exposure
 
-mse_nonzero_xgb <- mean((predictions_xgb[nonzero_indices] - (info_tr_test$ClaimNb_cap/info_tr_test$Exposure)[nonzero_indices])^2)
+hist(predicted_claimNb_glm)
+hist(predicted_claimNb_xgb)
+```
 
-print(paste("GLM MSE for Nonzero Claims:", mse_nonzero_glm))
-print(paste("XGBoost MSE for Nonzero Claims:", mse_nonzero_xgb))
+Typically, GLM and XGBoost do not output probabilities directly for regression tasks. Instead, they provide direct predictions of the outcome variable. We provide two attempts here.
+
+**Attempt 1.** Normalise the predictions so they range between 0 and 1, which can be interpreted as probabilities.
+
+```{r}
+# Normalise function
+normalise <- function(x) {
+  (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
+}
+
+# Calculate predictions for GLM and XGBoost
+predictions_glm_test <- exp(predict(glm_model, newdata = scaled_data_test, type = "response")) - 1
+predictions_xgb_test <- exp(predict(xgb_model, dtest)) - 1
+predictions_glm_cal <- exp(predict(glm_model, newdata = scaled_data_cal, type = "response")) - 1
+predictions_xgb_cal <- exp(predict(xgb_model, dcal)) - 1
+
+# Normalise predictions to get 'probabilities'
+Norm_probabilities_glm_test <- normalise(predictions_glm_test)
+Norm_probabilities_xgb_test <- normalise(predictions_xgb_test)
+Norm_probabilities_glm_cal <- normalise(predictions_glm_cal)
+Norm_probabilities_xgb_cal <- normalise(predictions_xgb_cal)
+
+# Output probabilities
+print(Norm_probabilities_glm_test)
+print(Norm_probabilities_xgb_test)
+
+hist(Norm_probabilities_glm_test)
+hist(Norm_probabilities_xgb_test)
+
+print(Norm_probabilities_glm_cal)
+print(Norm_probabilities_xgb_cal)
+
+hist(Norm_probabilities_glm_cal)
+hist(Norm_probabilities_xgb_cal)
+
 
 ```
+**Attempt 2.** Logistic Transformation - map any real-valued number into the (0, 1) interval, treating the output as a log-odds and converting it to a probability. (With logistic function $1/(1+e^{-x})$)
+
+```{r}
+# Logistic transformation
+logistic <- function(x) {
+  1 / (1 + exp(-x))
+}
+
+# Apply logistic transformation
+log_probabilities_glm_test <- logistic(predictions_glm_test)
+log_probabilities_xgb_test <- logistic(predictions_xgb_test)
+log_probabilities_glm_cal <- logistic(predictions_glm_cal)
+log_probabilities_xgb_cal <- logistic(predictions_xgb_cal)
+
+# Output probabilities
+print(log_probabilities_glm_test)
+print(log_probabilities_xgb_test)
+
+hist(log_probabilities_glm_test)
+hist(log_probabilities_xgb_test)
+
+print(log_probabilities_glm_cal)
+print(log_probabilities_xgb_cal)
+
+hist(log_probabilities_glm_cal)
+hist(log_probabilities_xgb_cal)
+```
+
+
+### For binary classifier
+
+```{r}
+# Converting the regression model output to probabilities for classification
+predictions_glm_test_non_neg <- pmax(predictions_glm_test, 0)
+predictions_xgb_test_non_neg <- pmax(predictions_xgb_test, 0)
+predictions_glm_cal_non_neg <- pmax(predictions_glm_cal, 0)
+predictions_xgb_cal_non_neg <- pmax(predictions_xgb_cal, 0)
+
+# Convert these to probabilities assuming a logistic model
+bin_probabilities_glm_test <- 1 / (1 + exp(-predictions_glm_test_non_neg))
+bib_probabilities_xgb_test <- 1 / (1 + exp(-predictions_xgb_test_non_neg))
+bin_probabilities_glm_cal <- 1 / (1 + exp(-predictions_glm_cal_non_neg))
+bib_probabilities_xgb_cal <- 1 / (1 + exp(-predictions_xgb_cal_non_neg))
+
+# Binary predictions using a threshold
+binary_predictions_glm_prob_test <- ifelse(bin_probabilities_glm_test > 0.51, 1, 0)
+binary_predictions_xgb_prob_test <- ifelse(bib_probabilities_xgb_test > 0.52, 1, 0)
+binary_predictions_glm_prob_cal <- ifelse(bin_probabilities_glm_cal > 0.51, 1, 0)
+binary_predictions_xgb_prob_cal <- ifelse(bib_probabilities_xgb_cal > 0.52, 1, 0)
+
+# output the probabilities and binary predictions
+print(bin_probabilities_glm_test)
+print(bib_probabilities_xgb_test)
+print(binary_predictions_glm_prob_test)
+print(binary_predictions_xgb_prob_test)
+
+print(bin_probabilities_glm_cal)
+print(bib_probabilities_xgb_cal)
+print(binary_predictions_glm_prob_cal)
+print(binary_predictions_xgb_prob_cal)
+
+hist(bin_probabilities_glm_test)
+hist(bib_probabilities_xgb_test)
+hist(bin_probabilities_glm_cal)
+hist(bib_probabilities_xgb_cal)
+
+```
+
+
+## Output probabilities for ClaimNb individually
 
 
 ```{r}
@@ -278,7 +412,17 @@ print(prob_xgb)
 
 ```
 
-## Binary probabilities
+We see that this somewhat makes sense since all our predicted numbers are concentrated on 0. So we try another wat to see the two-step procedure:
+
+1) Binary classification - if there ClaimNb>0 or not
+2) Given ClaimNb>0, get probabilities when ClaimNb = 0-4
+
+Then treat 2) as a conditional probability, multiplied by 1) and finally obtain the overall probability.
+
+## Two-step Procedure
+### Binary probabilities
+
+We do this binary classification according to our above binary classifier (which is constructed by setting threshold)
 
 ```{r}
 # Binary PMF from binary predictions
@@ -307,7 +451,7 @@ print(binary_pmf_xgb)
 
 ```
 
-## For non-zero claims
+### XGBoost For Given non-zero claims
 
 ```{r}
 # Filter training data for non-zero claims
@@ -335,9 +479,6 @@ y_train_nonzero <- train_nonzero$log_Scaled_ClaimNb
 X_test_nonzero <- as.matrix(test_nonzero[, -c(1,2,12,13,14)])
 y_test_nonzero <- test_nonzero$log_Scaled_ClaimNb
 
-```
-
-```{r}
 dtrain_nonzero <- xgb.DMatrix(data = X_train_nonzero, label = y_train_nonzero)
 dtest_nonzero <- xgb.DMatrix(data = X_test_nonzero, label = y_test_nonzero)
 
@@ -363,7 +504,6 @@ predictions_nonzero <- predictions_nonzero * test_nonzero$Exposure
 
 summary(predictions_nonzero)
 hist(predictions_nonzero)
-
 ```
 
 ```{r}
@@ -393,7 +533,7 @@ print(nonzero_pmf_probabilities)
 
 ```
 
-## Total PMF
+### Total PMF
 
 ```{r}
 overall_pmf <- numeric(5)  
