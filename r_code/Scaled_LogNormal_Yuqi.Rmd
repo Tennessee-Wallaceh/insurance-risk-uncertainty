@@ -212,7 +212,7 @@ hist(predicted_claimNb_xgb)
 ```{r}
 # Binary classification of predictions
 binary_predictions_glm <- ifelse(predicted_claimNb_glm > 0.05, 1, 0)
-binary_predictions_xgb <- ifelse(predicted_claimNb_xgb > 0.05, 1, 0)
+binary_predictions_xgb <- ifelse(predicted_claimNb_xgb > 0.045, 1, 0)
 
 # Actual binary values
 binary_actuals <- ifelse(info_test$ClaimNb_cap > 0, 1, 0)
@@ -261,7 +261,7 @@ melted_data <- melt(data_for_plot, id.vars = NULL, variable.name = "Model", valu
 ```{r}
 library(ggplot2)
 
-ggplot(melted_data, aes(x = as.factor(`Claim Status`), fill = Model)) +
+ClaimNb_binary <- ggplot(melted_data, aes(x = as.factor(`Claim Status`), fill = Model)) +
   geom_bar(position = "dodge", stat="count") +
   scale_x_discrete(labels = c("Zero", "Non-Zero")) + 
   labs(title = "Comparison of Actual and Predicted Claims (Binary)",
@@ -271,7 +271,7 @@ ggplot(melted_data, aes(x = as.factor(`Claim Status`), fill = Model)) +
   facet_wrap(~ Model, scales = "free_y") + 
   theme_minimal()
 
-
+ggsave("ClaimNb_binary.png", plot = ClaimNb_binary, width = 10, height = 5, dpi = 300)
 ```
 
 ## Output Predicted Probabilities
