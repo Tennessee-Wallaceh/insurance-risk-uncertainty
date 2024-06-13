@@ -56,7 +56,7 @@ xgblss = XGBoostLSS(
          )
 )
 
-param_dict = {
+""" param_dict = {
     "eta":              ["float", {"low": 1e-5,   "high": 1,     "log": True}],
     "max_depth":        ["int",   {"low": 1,      "high": 10,    "log": False}],
     "gamma":            ["float", {"low": 1e-8,   "high": 40,    "log": True}],
@@ -66,9 +66,9 @@ param_dict = {
     "booster":          ["categorical", ["gbtree"]],
     # "tree_method":    ["categorical", ["auto", "approx", "hist", "gpu_hist"]],
     # "gpu_id":         ["none", [0]]
-}
+} """
 
-np.random.seed(123)
+""" np.random.seed(123)
 opt_param = xgblss.hyper_opt(param_dict,
                              dtrain,
                              num_boost_round=100,        # Number of boosting iterations.
@@ -79,7 +79,7 @@ opt_param = xgblss.hyper_opt(param_dict,
                              silence=False,              # Controls the verbosity of the trail, i.e., user can silence the outputs of the trail.
                              seed=123,                   # Seed used to generate cv-folds.
                              hp_seed=None                # Seed for random number generator used in the Bayesian hyperparameter search.
-                            )
+                            ) """
 
 
 
@@ -177,7 +177,6 @@ print(f'MAE: {np.mean(np.abs(val_preds_mean - y_val))}')
 print(f'MSE: {mean_squared_error(y_val, val_preds_mean)}')
 print(f'Max: {np.max(np.abs(val_preds_mean - y_val))}')
 
-
 #########################################################################
 
 # for each x in the validation set, compute the intervals
@@ -198,27 +197,64 @@ plt.show()
 
 
 # plot dval ClaimAmount against DrivAge with intervals
-plt.figure()
-plt.scatter(X_val['VehAge'], y_val)
-plt.scatter(X_val['BonusMalus'], y_val, label='True')
-plt.fill_between(X_val['BonusMalus'], pred_quantiles_val.iloc[:,0], pred_quantiles_val.iloc[:,1], alpha=0.5, label='Predicted')
-plt.legend()
+
+def replace_with_mode_or_mean(df):
+    for column in df.columns:
+        if pd.api.types.is_numeric_dtype(df[column]):
+            mean_value = df[column].mean()  # Calculate the mean for numerical columns
+            df[column] = mean_value  # Replace column values with the mean
+        else:
+            mode_value = df[column].mode()[0]  # Calculate the mode for categorical columns
+            df[column] = mode_value  # Replace column values with the mode
+    return df
+
+
+
+
+var_to_plot = 'DrivAge'
+var_to_plot = 'VehPower'
+var_to_plot = 'VehAge'
+var_to_plot = 'VehGas'
+var_to_plot = 'BonusMalus'
+
+X_drivage_plot = X_val.copy()
+X_drivage_plot = replace_with_mode_or_mean(X_drivage_plot)
+X_drivage_plot = X_drivage_plot.head(X_train[var_to_plot].nunique())
+
+X_drivage_plot[var_to_plot] = sorted(X_val[var_to_plot].unique())
+
+X_drivage_plot = X_drivage_plot.head(149)
+X_drivage_plot[var_to_plot] = list(range(1, X_val['BonusMalus'].max()))
+
+
+
+categorical_columns = ['VehPower', 'VehAge', 'VehBrand', 'VehGas', 'Area', 'Region', 'DrivAge']
+for col in categorical_columns:
+    X_drivage_plot[col] = X_drivage_plot[col].astype('category')
+
+dplotDrivage = xgb.DMatrix(X_drivage_plot, nthread=n_cpu,  enable_categorical=True)
+pred_quantiles_val = xgblss.predict(dplotDrivage,
+                                    pred_type="quantiles",
+                                    n_samples=n_samples,
+                                    quantiles=quant_sel)
+
+pred_quantiles_val.iloc[:,0] = pred_quantiles_val.iloc[:,0] - q_hat
+pred_quantiles_val.iloc[:,1] = pred_quantiles_val.iloc[:,1] + q_hat
+
+drivAGe_interval_size = pred_quantiles_val.iloc[:, 1] - pred_quantiles_val.iloc[:, 0]
+# bar plot
+plt.bar(X_drivage_plot[var_to_plot], drivAGe_interval_size)
+plt.xlabel(var_to_plot)
+plt.ylabel('Interval Size')
+plt.title('Prediction Interval Sizes for ' + var_to_plot)
 plt.show()
-# plot the intervals of pred_quantiles_val against X_val['VehAge']
-df = pd.DataFrame({
-    'VehAge': X_val['VehAge'].reset_index(drop=True),
-    'PredQuantiles': pred_quantiles_val.iloc[:,0].reset_index(drop=True)
-})
-# Sort the DataFrame by 'VehAge'
-df_sorted = df.sort_values(by='VehAge')
-plt.figure()
-plt.plot(X_val['VehAge'][0:5,], pred_quantiles_val.iloc[:,0][0:5,])
-plt.plot(df_sorted['VehAge'][0:5], df_sorted['PredQuantiles'][0:5])
-plt.plot(X_val['VehAge'], pred_quantiles_val.iloc[:,1])
+
+# line plot interval size
+plt.plot(X_drivage_plot[var_to_plot], drivAGe_interval_size)
+plt.xlabel(var_to_plot)
+plt.ylabel('Interval Size')
+plt.title('Prediction Interval Sizes for ' + var_to_plot)
 plt.show()
-
-
-
 
 
 
